@@ -3,7 +3,8 @@ from django.conf import settings
 from django.contrib.auth import authenticate, login
 from django.contrib.auth import get_user_model
 from rest_framework.response import Response
-
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
 from rest_framework.views import APIView
 from rest_framework import status
 
@@ -58,19 +59,31 @@ class ChatViewSet(viewsets.ModelViewSet):
         # Автоматически установить текущего пользователя как владельца чата
         serializer.save(user=self.request.user)
 
-
 class MessageViewSet(viewsets.ModelViewSet):
     """
     API для отправки и получения сообщений.
     """
-    queryset = Message.objects.all()  # Добавлено для автоматического определения basename
+    queryset = Message.objects.all()
     serializer_class = MessageSerializer
     permission_classes = [IsAuthenticated]
 
+    @method_decorator(csrf_exempt)
+    def create(self, request, *args, **kwargs):
+        # Дополнительное логирование
+        print("Authorization header:", request.headers.get("Authorization"))
+        
+        if not request.user.is_authenticated:
+            return Response({"detail": "User is not authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        # Логика сохранения сообщения
+        return super().create(request, *args, **kwargs)
+
     def get_queryset(self):
-        # Показывать только сообщения в чатах текущего пользователя
         user_chats = Chat.objects.filter(user=self.request.user)
-        return Message.objects.filter(chat__in=user_chats)
+        print("User Chats:", user_chats)
+        messages = Message.objects.filter(chat__in=user_chats)
+        print("Messages:", messages)
+        return messages
 
     def perform_create(self, serializer):
         # Автоматически установить текущего пользователя как отправителя сообщения
